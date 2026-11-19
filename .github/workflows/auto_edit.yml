@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Python Packages
-        run: pip install faster-whisper pillow
+        run: pip install faster-whisper pillow yt-dlp
       - name: Render Pro Viral Reels
         run: python pro_editor.py
       - name: Upload Finished Reels
