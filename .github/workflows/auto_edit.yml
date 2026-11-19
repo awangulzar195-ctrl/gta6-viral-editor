@@ -1,0 +1,26 @@
+name: Auto Viral Reel Editor
+on:
+  push:
+    paths:
+      - 'input_clips/*.mp4'
+  workflow_dispatch:
+jobs:
+  edit-reels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg & Fonts
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python Packages
+        run: pip install faster-whisper pillow
+      - name: Render Pro Viral Reels
+        run: python pro_editor.py
+      - name: Upload Finished Reels
+        uses: actions/upload-artifact@v4
+        with:
+          name: Viral-Edited-Reels
+          path: edited_reels/*.mp4
