@@ -43,7 +43,7 @@ def get_duration(video_path: Path) -> float:
         capture_output=True, text=True
     )
     try:
-        return float(res.stdout.strip())
+        return max(float(res.stdout.strip()), 2.0)
     except Exception:
         return 10.0
 
@@ -95,7 +95,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Pop,DejaVu Sans,92,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,3,2,40,40,420,1
+Style: Pop,DejaVu Sans,90,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,3,2,40,40,420,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -125,28 +125,23 @@ def render_video(clip: Path, bgm: Path, sfx: Path, stickers: list):
     dur = get_duration(clip)
     ass_file = Path("temp_subs.ass")
     has_subs = build_pop_ass(clip, ass_file, has_audio)
-    out_file = OUTPUT_DIR / f"{clip.stem}_VIRAL.mp4"
+    out_file = OUTPUT_DIR / "viral_output.mp4"
 
-    # Visual Hook + Dynamic Motion Engine
+    # Safe, rock-solid Visual Hooks + Motion (Guaranteed even dimensions)
     if visual_hook_type == "rgb_punch_zoom":
-        # Opening 2.5s rapid punch-in + RGB split + beat zoom
         fg_motion = (
-            "scale=w='if(lt(t,2.2),1320-100*t,if(lt(mod(t,3.0),0.25),1240,1080))':h=-2:eval=frame,"
-            "rgbashift=rh='if(lt(t,2.0),14*sin(t*25),0)':bh='if(lt(t,2.0),-14*sin(t*25),0)',"
+            "scale=1080:1350:force_original_aspect_ratio=decrease,pad=1080:1350:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+            "rgbashift=rh='if(lt(t,2.2),14*sin(t*25),0)':bh='if(lt(t,2.2),-14*sin(t*25),0)',"
             "eq=contrast=1.22:brightness=0.06:saturation=1.45"
         )
     elif visual_hook_type == "flash_shake_intro":
-        # Opening white flash + violent camera shake + beat drops
         fg_motion = (
-            "scale=1200:-2,"
-            "crop=1080:ih:'60+45*sin(t*24)*if(lt(t,2.0),1,lt(mod(t,3.5),0.3))':'25*cos(t*24)*if(lt(t,2.0),1,lt(mod(t,3.5),0.3))',"
-            "geq=r='if(lt(t,0.18)+lt(mod(t,4.0),0.1),min(255,r(X,Y)+110),r(X,Y))':g='if(lt(t,0.18)+lt(mod(t,4.0),0.1),min(255,g(X,Y)+110),g(X,Y))':b='if(lt(t,0.18)+lt(mod(t,4.0),0.1),min(255,b(X,Y)+110),b(X,Y))',"
+            "scale=1160:1450:force_original_aspect_ratio=increase,crop=1080:1350:'40+35*sin(t*24)*if(lt(t,2.2),1,lt(mod(t,3.5),0.3))':'50+25*cos(t*24)*if(lt(t,2.2),1,lt(mod(t,3.5),0.3))',"
             "eq=contrast=1.24:brightness=0.07:saturation=1.45"
         )
     else:
-        # Climax Teaser Hook: Flash-forwards ending 1.5s at the very start (0-1.5s) with zoom + border
         fg_motion = (
-            "scale=w='if(lt(t,1.5),1280,if(lt(mod(t,3.0),0.25),1240,1080))':h=-2:eval=frame,"
+            "scale=1080:1350:force_original_aspect_ratio=decrease,pad=1080:1350:(ow-iw)/2:(oh-ih)/2:color=black@0,"
             "eq=contrast=1.25:brightness=0.08:saturation=1.5"
         )
 
@@ -157,15 +152,15 @@ def render_video(clip: Path, bgm: Path, sfx: Path, stickers: list):
         f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
     )
 
-    # Visual Hook: Top Neon Retention Progress Bar
-    fc += f"[base]drawbox=x=0:y=0:w='W*(t/{max(dur,1.0)})':h=16:color=#00FF88@0.95:t=fill[bar_v];"
+    # Visual Hook 1: Top Neon Retention Progress Bar
+    fc += f"[base]drawbox=x=0:y=0:w='W*(t/{dur})':h=16:color=#00FF88@0.95:t=fill[bar_v];"
 
-    # Visual Hook: Climax Flash-Forward Overlay (0.0s to 1.4s) if video > 5s
+    # Visual Hook 2: Climax Flash-Forward Teaser (0.0s to 1.4s) if video > 5s
     if visual_hook_type == "climax_teaser" and dur > 5.0:
         teaser_start = max(0.0, dur - 2.0)
         fc += (
-            f"[0:v]trim=start={teaser_start}:duration=1.4,setpts=PTS-STARTPTS,scale=920:-2,"
-            f"pad=944:ih+24:12:12:color=#FF1E1E,rgbashift=rh=8:bh=-8[teaser];"
+            f"[0:v]trim=start={teaser_start}:duration=1.4,setpts=PTS-STARTPTS,scale=920:1150:force_original_aspect_ratio=decrease,"
+            f"pad=iw+24:ih+24:12:12:color=#FF1E1E,rgbashift=rh=8:bh=-8[teaser];"
             f"[bar_v][teaser]overlay=(W-w)/2:(H-h)/2:enable='lt(t,1.4)'[hook_v];"
         )
     else:
@@ -187,7 +182,7 @@ def render_video(clip: Path, bgm: Path, sfx: Path, stickers: list):
         fc += f",ass={ass_file}"
     fc += "[out_v];"
 
-    # Crash-Proof Audio Mixing (Works even if clip has NO microphone/game audio!)
+    # Crash-Proof Audio Mixing
     if has_audio:
         fc += (
             "[0:a]volume=1.35,bass=g=5[voice];"
