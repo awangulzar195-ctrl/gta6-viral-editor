@@ -59,14 +59,14 @@ def fetch_online_assets():
         bgm_file = CACHE_DIR / "fallback_phonk.wav"
         subprocess.run([
             "ffmpeg", "-f", "lavfi", "-i",
-            "aevalsrc='0.45*sin(2*PI*55*t)*exp(-4*mod(t,0.5))+0.3*sin(2*PI*587.33*t)*exp(-14*mod(t,0.25))+0.15*(random(0)*2-1)*exp(-22*mod(t,0.25))':s=44100:d=60",
+            "aevalsrc='0.45*sin(2*PI*55*t)*exp(-4*mod(t,0.5))+0.3*sin(2*PI*587.33*t)*exp(-14*mod(t,0.25))':s=44100:d=60",
             str(bgm_file), "-y"
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     sfx_file = CACHE_DIR / "impact_sfx.wav"
     subprocess.run([
         "ffmpeg", "-f", "lavfi", "-i",
-        "aevalsrc='0.9*sin(2*PI*(160-110*t)*t)*exp(-2.8*t)+0.4*(random(0)*2-1)*exp(-8*t)':s=44100:d=1.2",
+        "aevalsrc='0.9*sin(2*PI*(160-110*t)*t)*exp(-2.8*t)':s=44100:d=1.2",
         str(sfx_file), "-y"
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -95,7 +95,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Pop,DejaVu Sans,90,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,3,2,40,40,420,1
+Style: Pop,DejaVu Sans,88,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,3,2,40,40,420,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -120,52 +120,42 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 def render_video(clip: Path, bgm: Path, sfx: Path, stickers: list):
     hook_text, box_color, text_color = random.choice(HOOKS)
-    visual_hook_type = random.choice(["climax_teaser", "rgb_punch_zoom", "flash_shake_intro"])
     has_audio = has_audio_stream(clip)
     dur = get_duration(clip)
     ass_file = Path("temp_subs.ass")
     has_subs = build_pop_ass(clip, ass_file, has_audio)
     out_file = OUTPUT_DIR / "viral_output.mp4"
 
-    # Safe, rock-solid Visual Hooks + Motion (Guaranteed even dimensions)
-    if visual_hook_type == "rgb_punch_zoom":
-        fg_motion = (
-            "scale=1080:1350:force_original_aspect_ratio=decrease,pad=1080:1350:(ow-iw)/2:(oh-ih)/2:color=black@0,"
-            "rgbashift=rh='if(lt(t,2.2),14*sin(t*25),0)':bh='if(lt(t,2.2),-14*sin(t*25),0)',"
-            "eq=contrast=1.22:brightness=0.06:saturation=1.45"
-        )
-    elif visual_hook_type == "flash_shake_intro":
-        fg_motion = (
-            "scale=1160:1450:force_original_aspect_ratio=increase,crop=1080:1350:'40+35*sin(t*24)*if(lt(t,2.2),1,lt(mod(t,3.5),0.3))':'50+25*cos(t*24)*if(lt(t,2.2),1,lt(mod(t,3.5),0.3))',"
-            "eq=contrast=1.24:brightness=0.07:saturation=1.45"
-        )
-    else:
-        fg_motion = (
-            "scale=1080:1350:force_original_aspect_ratio=decrease,pad=1080:1350:(ow-iw)/2:(oh-ih)/2:color=black@0,"
-            "eq=contrast=1.25:brightness=0.08:saturation=1.5"
-        )
-
     inputs = ["-i", str(clip), "-i", str(bgm), "-i", str(sfx)]
+
+    # 1. Blurred 9:16 Background + High-Contrast Foreground + Visual Shake Hook (0-2s)
     fc = (
         f"[0:v]scale=360:640:force_original_aspect_ratio=increase,crop=360:640,boxblur=14:4,scale=1080:1920,eq=brightness=-0.16[bg];"
-        f"[0:v]{fg_motion},unsharp=5:5:1.1[fg];"
+        f"[0:v]scale=1160:1450:force_original_aspect_ratio=increase,"
+        f"crop=1080:1350:'40+30*sin(t*22)*lt(t,2.0)':'50+20*cos(t*22)*lt(t,2.0)',"
+        f"eq=contrast=1.22:brightness=0.06:saturation=1.45,unsharp=5:5:1.1[fg];"
         f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
     )
 
-    # Visual Hook 1: Top Neon Retention Progress Bar
-    fc += f"[base]drawbox=x=0:y=0:w='W*(t/{dur})':h=16:color=#00FF88@0.95:t=fill[bar_v];"
+    # 2. Visual Hook: Animated Top Neon Retention Progress Bar (Valid overlay expression)
+    fc += (
+        f"color=c=#00FF88:s=1080x16:d={dur}[bar];"
+        f"[base][bar]overlay=x='-1080+(1080*t/{dur})':y=0[bar_v];"
+    )
 
-    # Visual Hook 2: Climax Flash-Forward Teaser (0.0s to 1.4s) if video > 5s
-    if visual_hook_type == "climax_teaser" and dur > 5.0:
+    # 3. Visual Hook: Climax Flash-Forward Teaser (0.0s - 1.4s) with RGB Glitch + Red Border
+    if dur > 5.0:
         teaser_start = max(0.0, dur - 2.0)
         fc += (
-            f"[0:v]trim=start={teaser_start}:duration=1.4,setpts=PTS-STARTPTS,scale=920:1150:force_original_aspect_ratio=decrease,"
+            f"[0:v]trim=start={teaser_start}:duration=1.4,setpts=PTS-STARTPTS,"
+            f"scale=900:1120:force_original_aspect_ratio=decrease,"
             f"pad=iw+24:ih+24:12:12:color=#FF1E1E,rgbashift=rh=8:bh=-8[teaser];"
             f"[bar_v][teaser]overlay=(W-w)/2:(H-h)/2:enable='lt(t,1.4)'[hook_v];"
         )
     else:
         fc += "[bar_v]copy[hook_v];"
 
+    # 4. Bouncing HD Emoji Sticker
     if stickers:
         stk = random.choice(stickers)
         inputs += ["-i", str(stk)]
@@ -176,20 +166,20 @@ def render_video(clip: Path, bgm: Path, sfx: Path, stickers: list):
     else:
         fc += "[hook_v]copy[v_pre];"
 
-    # Text Hook Banner (Top)
+    # 5. Text Hook Banner + Pop-Up Captions
     fc += f"[v_pre]drawtext=text='{hook_text}':fontcolor={text_color}:fontsize=52:box=1:boxcolor={box_color}@0.95:boxborderw=22:x=(w-text_w)/2:y=250"
     if has_subs:
         fc += f",ass={ass_file}"
     fc += "[out_v];"
 
-    # Crash-Proof Audio Mixing
+    # 6. Fixed Audio Mixing using asplit (No more exit status 234!)
     if has_audio:
         fc += (
-            "[0:a]volume=1.35,bass=g=5[voice];"
+            "[0:a]volume=1.35,bass=g=5,asplit=2[voice1][voice2];"
             "[1:a]aloop=loop=-1:size=2e+09,volume=0.38,bass=g=7[bgm];"
-            "[bgm][voice]sidechaincompress=threshold=0.03:ratio=6:attack=50:release=400[ducked_bgm];"
+            "[bgm][voice1]sidechaincompress=threshold=0.03:ratio=6:attack=50:release=400[ducked_bgm];"
             "[2:a]volume=0.95[sfx];"
-            "[voice][ducked_bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2[out_a]"
+            "[voice2][ducked_bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2[out_a]"
         )
     else:
         fc += (
@@ -198,13 +188,19 @@ def render_video(clip: Path, bgm: Path, sfx: Path, stickers: list):
             "[bgm][sfx]amix=inputs=2:duration=first:dropout_transition=2[out_a]"
         )
 
-    subprocess.run([
+    res = subprocess.run([
         "ffmpeg", *inputs, "-filter_complex", fc,
         "-map", "[out_v]", "-map", "[out_a]",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
         "-c:a", "aac", "-b:a", "192k", "-shortest", str(out_file), "-y"
-    ], check=True)
-    if ass_file.exists(): ass_file.unlink()
+    ], capture_output=True, text=True)
+
+    if res.returncode != 0:
+        print("FFMPEG ERROR LOG:\n", res.stderr)
+        raise RuntimeError(f"FFmpeg failed with code {res.returncode}")
+
+    if ass_file.exists():
+        ass_file.unlink()
 
 bgm, sfx, stickers = fetch_online_assets()
 clips = sorted(INPUT_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
